@@ -1,0 +1,29 @@
+name: Feature request
+description: A guard, a command or a report that is missing.
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: What went wrong in an agent session that a hook could have caught, or what you could not find out from the data Keelson already writes.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What you would like
+      description: Which hook event it uses, what it reads, and what it prints or blocks.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: What you do today instead
+  - type: checkboxes
+    id: constraints
+    attributes:
+      label: Constraints
+      options:
+        - label: It needs no network connection and no new dependency.
+          required: true

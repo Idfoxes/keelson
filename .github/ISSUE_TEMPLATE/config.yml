@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Troubleshooting guide
+    url: https://github.com/Idfoxes/keelson/blob/main/docs/TROUBLESHOOTING.md
+    about: A hook does not fire, a check blocks you, or you want to turn one off.

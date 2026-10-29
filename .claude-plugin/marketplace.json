@@ -1,0 +1,38 @@
+{
+  "name": "keelson",
+  "owner": {
+    "name": "Idfoxes"
+  },
+  "metadata": {
+    "description": "A local-first harness for Claude Code and Codex that logs every turn and tool call on your machine, runs quality gates at the end of each turn, and reviews your week to propose rules backed by evidence.",
+    "version": "0.1.0"
+  },
+  "plugins": [
+    {
+      "name": "keelson",
+      "source": "./plugins/keelson",
+      "description": "A local-first harness for Claude Code and Codex that logs every turn and tool call on your machine, runs quality gates at the end of each turn, and reviews your week to propose rules backed by evidence.",
+      "version": "0.1.0",
+      "author": {
+        "name": "Idfoxes",
+        "url": "https://github.com/Idfoxes"
+      },
+      "homepage": "https://github.com/Idfoxes/keelson",
+      "repository": "https://github.com/Idfoxes/keelson",
+      "license": "Apache-2.0",
+      "keywords": [
+        "claude-code",
+        "codex",
+        "agent-harness",
+        "hooks",
+        "quality-gate",
+        "local-first",
+        "observability",
+        "token-cost",
+        "agent-memory",
+        "code-review"
+      ],
+      "category": "development"
+    }
+  ]
+}

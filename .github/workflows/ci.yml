@@ -1,0 +1,123 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node: [18, 20, 22]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+      - name: Syntax of every .mjs file
+        run: find . -name '*.mjs' -not -path './.git/*' -print0 | xargs -0 -n1 node --check
+      - name: Syntax of every .sh file
+        run: find . -name '*.sh' -not -path './.git/*' -print0 | xargs -0 -n1 bash -n
+      - name: Every JSON manifest parses
+        run: find . -name '*.json' -not -path './.git/*' -print0 | xargs -0 -n1 node -e 'JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"))'
+      - name: Every SKILL.md has name and description
+        run: |
+          status=0
+          while IFS= read -r -d '' file; do
+            head="$(awk 'NR == 1 && $0 != "---" { exit } NR > 1 && $0 == "---" { exit } NR > 1 { print }' "$file")"
+            for key in name description; do
+              if ! printf '%s\n' "$head" | grep -q "^${key}:"; then
+                echo "$file: frontmatter has no ${key}"
+                status=1
+              fi
+            done
+          done < <(find . -name SKILL.md -not -path './.git/*' -print0)
+          exit "$status"
+
+  hooks:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node: [18, 20, 22]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+      - name: Every hook command points at a shipped script
+        run: |
+          node -e '
+            const fs = require("fs");
+            const hooks = JSON.parse(fs.readFileSync("plugins/keelson/hooks/hooks.json", "utf8")).hooks;
+            let missing = 0;
+            for (const group of Object.values(hooks).flat()) {
+              for (const hook of group.hooks) {
+                const script = /\/scripts\/([^"\s]+)/.exec(hook.command)[1];
+                if (!fs.existsSync("plugins/keelson/scripts/" + script)) { console.log("missing: " + script); missing = 1; }
+              }
+            }
+            process.exit(missing);
+          '
+      - name: Every guard exits 0 on a sample payload and prints nothing or valid JSON
+        run: |
+          cat > "$RUNNER_TEMP/smoke.sh" <<'SMOKE'
+          set -u
+          scripts="$1"
+          work="$(mktemp -d)"
+          export HOME="$work/home"
+          mkdir -p "$HOME" "$work/repo"
+          git -C "$work/repo" init -q
+          printf '%s\n' '{"type":"user","message":{"role":"user","content":"hello"}}' '{"type":"assistant","message":{"role":"assistant","model":"claude-opus-4","content":[{"type":"text","text":"Done."}],"usage":{"input_tokens":10,"output_tokens":5}}}' > "$work/transcript.jsonl"
+          common="\"session_id\":\"smoke0001\",\"transcript_path\":\"$work/transcript.jsonl\",\"cwd\":\"$work/repo\""
+          payload() {
+            case "$1" in
+              prompt) echo "{$common,\"hook_event_name\":\"UserPromptSubmit\",\"prompt\":\"hello\"}" ;;
+              start) echo "{$common,\"hook_event_name\":\"SessionStart\",\"source\":\"startup\"}" ;;
+              end) echo "{$common,\"hook_event_name\":\"SessionEnd\",\"reason\":\"other\"}" ;;
+              stop) echo "{$common,\"hook_event_name\":\"Stop\",\"stop_hook_active\":false}" ;;
+              denied) echo "{$common,\"hook_event_name\":\"PermissionDenied\",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"ls\"},\"reason\":\"smoke\"}" ;;
+              post) echo "{$common,\"hook_event_name\":\"PostToolUse\",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"ls\"},\"tool_response\":{\"stdout\":\"a\"}}" ;;
+              bash) echo "{$common,\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"ls\"}}" ;;
+              force) echo "{$common,\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"git push --force origin main\"}}" ;;
+              write) echo "{$common,\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"$work/repo/a.txt\",\"content\":\"x\"}}" ;;
+              cron) echo "{$common,\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"CronCreate\",\"tool_input\":{\"cron\":\"0 9 * * *\",\"prompt\":\"x\",\"recurring\":false}}" ;;
+              agent) echo "{$common,\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Agent\",\"tool_input\":{\"subagent_type\":\"log-reader\",\"prompt\":\"x\",\"description\":\"x\"}}" ;;
+            esac
+          }
+          status=0
+          check() {
+            name="$1"; kind="$2"; shift 2
+            out="$(payload "$kind" | (cd "$work/repo" && node "$scripts/$name" "$@") 2>"$work/err")"
+            code=$?
+            if [ "$code" -ne 0 ]; then echo "FAIL $name ($kind): exit $code"; head -c 300 "$work/err"; status=1; return; fi
+            if [ -n "$out" ] && ! printf '%s' "$out" | node -e 'JSON.parse(require("fs").readFileSync(0,"utf8"))' 2>/dev/null; then echo "FAIL $name ($kind): output is not JSON"; status=1; return; fi
+            if [ -n "$out" ]; then echo "ok   $name ($kind): JSON"; else echo "ok   $name ($kind): silent"; fi
+          }
+          check journal.mjs prompt
+          check context-guard.mjs prompt
+          check lessons.mjs prompt
+          check build-policy.mjs start --hook
+          check handoff.mjs start
+          check agent-context.mjs end session-end
+          check context-ledger.mjs post
+          check permission-denied.mjs denied
+          check protect-guard.mjs write
+          check protect-guard.mjs bash
+          check cron-guard.mjs cron
+          check destructive-guard.mjs bash
+          check destructive-guard.mjs force
+          check model-route.mjs agent
+          check reuse-guard.mjs write
+          check turn-log.mjs stop
+          check stop-dispatch.mjs stop
+          for guard in claims-guard stop-evidence-guard review-guard wake-guard push-first-guard quality-gate; do check "$guard.mjs" stop; done
+          asked="$(payload force | (cd "$work/repo" && node "$scripts/destructive-guard.mjs"))"
+          case "$asked" in *'"permissionDecision":"ask"'*) echo "ok   destructive-guard.mjs asks before a force push" ;; *) echo "FAIL destructive-guard.mjs did not ask before a force push"; status=1 ;; esac
+          exit "$status"
+          SMOKE
+          bash "$RUNNER_TEMP/smoke.sh" "$GITHUB_WORKSPACE/plugins/keelson/scripts"

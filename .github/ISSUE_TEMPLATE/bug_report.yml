@@ -1,0 +1,57 @@
+name: Bug report
+description: A hook crashes, blocks wrongly, or a command prints something wrong.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Read the [troubleshooting guide](https://github.com/Idfoxes/keelson/blob/main/docs/TROUBLESHOOTING.md) first. Do not paste whole files from `~/.agent`: they contain your prompts. Paste only the lines that matter, after you have read them.
+  - type: input
+    id: version
+    attributes:
+      label: Keelson version
+      description: The version in `plugins/keelson/.claude-plugin/plugin.json`, or the tag you installed.
+    validations:
+      required: true
+  - type: dropdown
+    id: agent
+    attributes:
+      label: Where does it happen
+      options:
+        - Claude Code
+        - Codex
+        - Both
+    validations:
+      required: true
+  - type: input
+    id: platform
+    attributes:
+      label: Operating system and Node version
+      description: For example "macOS 14, node 20" or "Ubuntu 22.04, node 18". Windows is untested.
+    validations:
+      required: true
+  - type: input
+    id: hook
+    attributes:
+      label: Hook or command
+      description: For example `stop-dispatch.mjs` or `findings.mjs stats`.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected and what happened
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: How to reproduce
+      description: A sample payload piped into the script, as in the troubleshooting guide, is the best reproduction.
+      render: shell
+  - type: textarea
+    id: runs
+    attributes:
+      label: Matching rows from hook-runs.jsonl
+      description: Only the rows for this hook, and only after you have read them.
+      render: json
